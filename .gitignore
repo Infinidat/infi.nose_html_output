@@ -52,4 +52,4 @@ tmp*
 !tmp*py
 buildout.in
 
-src/infi/nose-html-output/__version__.py
+src/infi/nose_html_output/__version__.py
