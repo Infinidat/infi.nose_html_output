@@ -17,7 +17,6 @@ import time
 from pkg_resources import resource_filename
 with open(resource_filename(__name__, "nose.head.html"), 'rb') as fd:
     head = fd.read()
-color_dict = {"red": "failed", "green": "passed", "cyan": "running", "orange": "skipped"}
 
 # copied from unittest/result.py
 def _is_relevant_tb_level(tb):
@@ -91,7 +90,7 @@ class NosePlugin(Plugin):
         self.skipped_tests = 0
         self.failed_tests = 0
         
-        self.res = []           # result (in color strings) of latest module\suite\test
+        self.res = []           # result (string) of latest module\suite\test
         self.trace = []         # traceback of latest module\suite\test
         self.log_name = []
         self.log_stream = []
@@ -99,7 +98,7 @@ class NosePlugin(Plugin):
         self.stdouts = []
         self.setLogger()
         
-        self.status = "cyan"
+        self.status = "running"
         
         self.root_dir_name = time.strftime("%Y_%m_%d__%H_%M_%S")
         os.mkdir(self.root_dir_name)
@@ -133,13 +132,13 @@ class NosePlugin(Plugin):
         return ", ".join(sub_labels)
         
     def update_html(self):
-        status = {"cyan": "Running...", "red": "FAILED", "green": "OK"}[self.status]
+        status = {"running": "Running...", "failed": "FAILED", "passed": "OK"}[self.status]
         self.html_h1.text = "Status: %s" % (status,)
         self.html_h2_1.text = "[%d modules, %d suites, %d tests]" % (self.total_modules, self.total_suites, self.total_tests)
         self.html_h2_2.text = self.get_subtitle_label_for_html()
         result_file = open(os.path.join(self.root_dir_name, "result.html"), "wb")
         # note that we don't use method="html" in tostring because it doesn't do indentation correctly
-        # Also, we use lxml.etree instead of the Python default because pretty_print is not available there
+        # Also, we use lxml.etree instead of the Python implementation because pretty_print is not available there
         html_string = etree.tostring(self.html_root, pretty_print=True)
         html_string = html_string.replace("<head/>", "<head>%s</head>" % head)
         html_string = "<!DOCTYPE html>\n" + html_string # TODO maybe we can add the doctype with etree
@@ -216,8 +215,8 @@ class NosePlugin(Plugin):
         self.update_html()
         
     def finalize(self, result):
-        if self.status == "cyan":
-            self.status = "red" if (self.failed_tests > 0) else "green"
+        if self.status == "running":
+            self.status = "failed" if (self.failed_tests > 0) else "passed"
         self.update_html()
         
     def setLogger(self):
@@ -234,15 +233,15 @@ class NosePlugin(Plugin):
         root_logger.addHandler(self.log_handler)
     
     def addError(self, test, err):
-        self.res[-1] = "red"
+        self.res[-1] = "failed"
     def addDeprecated(self, test):
-        self.res[-1] = "orange"
+        self.res[-1] = "skipped"
     def addFailure(self, test, err):
-        self.res[-1] = "red"
+        self.res[-1] = "failed"
     def addSkip(self, test, reason):
-        self.res[-1] = "orange"
+        self.res[-1] = "skipped"
     def addSuccess(self, test):
-        self.res[-1] = "green"
+        self.res[-1] = "passed"
     # we intercept the error for printing the trace into the log in the handle* functions and not the add*
     # functions because we need them before format* functions of the plugins are called - plugins mangle the error
     def handleError(self, test, err):
@@ -282,13 +281,14 @@ class NosePlugin(Plugin):
     def startX(self):
         for stream in self.log_stream:
             stream.flush()
-        self.res.append("cyan")
+        self.res.append("running")
         self.trace.append(None)
         logname = os.path.join(*self.name) + ".txt"
-        dirname = os.path.dirname(os.path.join(self.root_dir_name, logname))
+        log_path = os.path.join(self.root_dir_name, logname)
+        dirname = os.path.dirname(log_path)
         if dirname and not os.path.exists(dirname):
             os.makedirs(dirname)
-        logfile = AutoStream(os.path.join(self.root_dir_name, logname))
+        logfile = AutoStream(log_path)
         self.log_name.append(logname)
         self.log_stream.append(logfile)
         self.log_handler.stream = self.log_stream[-1]
@@ -298,8 +298,8 @@ class NosePlugin(Plugin):
         
     def stopX(self):
         res = self.res.pop()
-        if res == "cyan":
-            res = "green"
+        if res == "running":
+            res = "passed"
         trace = self.trace.pop()
         log_stream = self.log_stream.pop()
         self.log_handler.stream = self.log_stream[-1]
@@ -322,15 +322,15 @@ class NosePlugin(Plugin):
         self.startX()
         self.log_stream[-1].add_callback(self.append_module)
         self.add_html_module(name, desc, code)
-        self.html_module_td.attrib["class"] = "module_name module_" + color_dict[self.res[-1]]
+        self.html_module_td.attrib["class"] = "module_name module_" + self.res[-1]
         self.module_appended = False
     def stopModule(self, module):
         res = self.stopX()
-        if res == "orange":
+        if res == "skipped":
             self.skipped_modules += 1
         elif self.module_failed_suites > 0:
-            res = "red"
-        self.html_module_td.attrib["class"] = "module_name module_" + color_dict[res]
+            res = "failed"
+        self.html_module_td.attrib["class"] = "module_name module_" + res
         self.update_html()
     def startSuite(self, suite):
         name = self.name[-1] + "." + suite.__name__
@@ -342,17 +342,17 @@ class NosePlugin(Plugin):
         self.suite_appended = False
         self.log_stream[-1].add_callback(self.append_suite)
         self.add_html_suite(name, desc, code)
-        self.html_suite_td.attrib["class"] = "suite_name suite_" + color_dict[self.res[-1]]
+        self.html_suite_td.attrib["class"] = "suite_name suite_" + self.res[-1]
     def stopSuite(self, suite):
         res = self.stopX()
-        if res == "orange":
+        if res == "skipped":
             self.skipped_suites += 1
         elif self.suite_failed_tests > 0:
-            res = "red"
-        if res == "red":
+            res = "failed"
+        if res == "failed":
             self.module_failed_suites += 1
         self.update_html()
-        self.html_suite_td.attrib["class"] = "suite_name suite_" + color_dict[res]
+        self.html_suite_td.attrib["class"] = "suite_name suite_" + res
     def startTest(self, test):
         mymeth = test.test.__getattribute__(test.test._testMethodName)
         name = test.id()
@@ -365,15 +365,15 @@ class NosePlugin(Plugin):
         self.total_tests += 1
         self.startX()
         self.add_html_test(name, desc, code)
-        self.html_cur_test_td.attrib["class"] = "test_name test_" + color_dict[self.res[-1]]
+        self.html_cur_test_td.attrib["class"] = "test_name test_" + self.res[-1]
         self.update_html()
     def stopTest(self, test):
         res = self.stopX()
-        if res == "orange":
+        if res == "skipped":
             self.skipped_tests += 1
-        elif res == "red":
+        elif res == "failed":
             self.failed_tests += 1
             self.suite_failed_tests += 1
-        self.html_cur_test_td.attrib["class"] = "test_name test_" + color_dict[res]
+        self.html_cur_test_td.attrib["class"] = "test_name test_" + res
         self.update_html()
 
