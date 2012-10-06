@@ -15,7 +15,7 @@ import sys
 import time
 
 from pkg_resources import resource_filename
-with open(resource_filename(__name__, "nose.head.html"), 'rb') as fd:
+with open(resource_filename(__name__, "nose.head.html"), 'r') as fd:
     head = fd.read()
 
 # copied from unittest/result.py
@@ -50,7 +50,7 @@ class AutoStream(object):
     
     def write(self, buf):
         if self._file is None:
-            self._file = open(self._filename, "wb")
+            self._file = open(self._filename, "w")
             for callback in self._callback:
                 callback()
         self._file.write(buf)
@@ -136,11 +136,15 @@ class NosePlugin(Plugin):
         self.html_h1.text = "Status: %s" % (status,)
         self.html_h2_1.text = "[%d modules, %d suites, %d tests]" % (self.total_modules, self.total_suites, self.total_tests)
         self.html_h2_2.text = self.get_subtitle_label_for_html()
-        result_file = open(os.path.join(self.root_dir_name, "result.html"), "wb")
+        result_file = open(os.path.join(self.root_dir_name, "result.html"), "w")
         # note that we don't use method="html" in tostring because it doesn't do indentation correctly
         # Also, we use lxml.etree instead of the Python implementation because pretty_print is not available there
         html_string = etree.tostring(self.html_root, pretty_print=True)
-        html_string = html_string.replace("<head/>", "<head>%s</head>" % head)
+        try:
+            html_string = str(html_string, "ascii")
+        except TypeError:
+            pass # python 2.x
+        html_string = html_string.replace("<head/>", "<head>" + head + "</head>")
         html_string = "<!DOCTYPE html>\n" + html_string # TODO maybe we can add the doctype with etree
         result_file.write(html_string)
         
@@ -220,8 +224,11 @@ class NosePlugin(Plugin):
         self.update_html()
         
     def setLogger(self):
-        import StringIO
-        stream = StringIO.StringIO()
+        try:
+            from StringIO import StringIO
+        except ImportError:
+            from io import StringIO
+        stream = StringIO()
         format = logging.Formatter('%(name)s: %(levelname)s: %(message)s')
         self.log_handler = logging.StreamHandler(stream)
         self.log_handler.setFormatter(format)
