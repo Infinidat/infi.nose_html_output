@@ -14,134 +14,92 @@ body {
     border-color: #a0a0a0;
     border-style: solid;
     box-shadow: 5px 5px 6px #888;
-}
-
-#main > table > tbody > tr > td:nth_child(2) > a {
-    font-weight: 700;
-    color: #303030;
-}
-
-#main > table {
-    margin-top: 20px;
-    margin-bottom: 20px;
-}
-
-hr {
-    height: 1px;
-    border: 0;
-    background: #a0a0a0;
-}
-
-#main > table:last-child {
-    margin-bottom: 10px;
-}
-
-#main > table:first-child {
-    margin-top: 10px;
-}
-
-#main > table > tbody > tr:first-child,
-#main > table > tbody > tr > td > table > tbody > tr:first-child,
-#main > table > tbody > tr > td > table > tbody > tr > td > table > tbody > tr:first-child
-{
-    border-top-style: none;
-}
-
-tr {
-    border-top: 1px solid white;
-}
-
-table {
-    padding: 0px;
-    margin: 0px;
-    width: 100%;
-    border-collapse: collapse;
+    padding-top: 10px;
+    padding-bottom: 10px;
 }
 
 .h1 {
     font-size: 20px;
 }
 
-td {
-    margin: 0px;
-    padding: 0px;
+.actions {
+    color: black;
+    font-size: 12px;
+    font-weight: bold;
+    padding-right: 5px;
+    vertical-align: middle;
 }
 
-td.module_name {
-    margin-left: 5px;
-    margin-right: 10px;
-    padding-left: 5px;
-    padding-bottom: 5px;
-    padding-top: 5px;
-    width: 90%;
-    display: inline;
-}
-
-td.suite_name {
-    margin-left: 30px;
-    margin-right: 25px;
-    padding-left: 5px;
-    padding-bottom: 5px;
-    padding-top: 5px;
-    width: 90%;
-    display: inline;
-}
-
-td.test_name {
-    margin-left: 55px;
-    margin-right: 60px;
-    padding-left: 5px;
-    padding-bottom: 5px;
-    padding-top: 5px;
-    width: 90%;
-    display: inline;
+.test_running, .suite_running, .module_running,
+.test_passed, .suite_passed, .module_passed,
+.test_skipped, .suite_skipped, .module_skipped {
+    border-left-width: 10px;
+    border-left-style: solid;
 }
 
 .test_failed, .suite_failed, .module_failed {
     border-left-color: red;
-    border-left-width: 10px;
-    border-left-style: solid;
-}
-
-tr {
-    line-height: 25px;
 }
 
 .test_skipped, .suite_skipped, .module_skipped {
     border-left-color: orange;
-    border-left-width: 10px;
-    border-left-style: solid;
 }
 
 .test_passed, .suite_passed, .module_passed {
     border-left-color: green;
-    border-left-width: 10px;
-    border-left-style: solid;
 }
 
 .test_running, .suite_running, .module_running {
     border-left-color: transparent;
-    border-left-width: 10px;
+}
+
+.module_name, .suite_name, .test_name {
+   border-left-width: 10px;
     border-left-style: solid;
+    padding-left: 5px;
+    padding-top: 4px;
+    padding-bottom: 4px;
 }
 
-td.actions {
-    width: 10%;
-    display: inline;
-    color: black;
-    font-size: 12px;
-    font-weight: bold;
-    padding: 5px;
+@-moz-document url-prefix() {
+    /* firefox only. The indicator color bars hide the hr so they should be shorter */
+    .module_name, .suite_name, .test_name {
+        padding-bottom: 3px;
+    }
 }
 
-.code_link, .desc_link, .log_link {
-    text-decoration: none;
-    color: #c0c0c0;
+.module_name {
+    margin-left: 5px;
 }
 
-.code_link[href], .desc_link[href], .log_link[href] {
-    color: black;
-    text-decoration: underline;
+.suite_name {
+    margin-left: 30px;
+}
+
+.test_name {
+    margin-left: 55px;
+}
+
+.module-row, .suite-row, .test-row {
+    margin-top: 5px;
+    margin-bottom: 5px;
+    margin-right: 10px;
+    margin-left: 10px;
+}
+
+hr.white-line {
+    height: 1px;
+    background-color: white;
+    border: 0;
+    margin: 0;
+}
+
+hr.module-separator {
+    height: 1px;
+    border: 0;
+    background-color: #a0a0a0;
+    margin-top: 20px;
+    margin-bottom: 20px;
 }
 
 .legend {
@@ -172,6 +130,16 @@ td.actions {
     border-color: #878787 transparent transparent transparent;
 }
 
+.code_link, .desc_link, .log_link {
+    text-decoration: none;
+    color: #c0c0c0;
+}
+
+.code_link[href], .desc_link[href], .log_link[href] {
+    color: black;
+    text-decoration: underline;
+}
+
 .description {
     margin-left: 150px;
     border: 1px solid silver;
@@ -185,7 +153,8 @@ td.actions {
     $(document).ready(function() {
         var toggle_foreach = function(index, element) {
             var func = function() {
-                $('tr', $(element).parent().parent().parent()).next().toggle();
+                $('div', $(element).parent().parent().parent()).next().next().toggle();
+                $('div', $(element).parent().parent().parent()).next().toggle();
                 var cur_class = $(element).attr('class')
                 if (cur_class.search("down-arrow") == -1) {
                     $(element).attr('class', cur_class.replace('right-arrow', 'down-arrow'))
@@ -201,7 +170,7 @@ td.actions {
         
         var minitoggle_foreach = function(index, element) {
             var func = function() {
-                $("div", $("td", $(element).parent().parent()).next()).toggle();
+                $("div", $(element).parent().parent()).toggle();
                 return false;
             }
             $(element).click(func);
