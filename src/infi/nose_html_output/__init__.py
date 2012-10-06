@@ -74,10 +74,13 @@ class NosePlugin(Plugin):
     name = 'html-output'
 
     def options(self, parser, env=os.environ):
+        parser.add_option("--open-browser", action="store_true", default=False,
+                         help="If speicified, the default browser will be opened with the result page")
         super(NosePlugin, self).options(parser, env=env)
 
     def configure(self, options, conf):
         super(NosePlugin, self).configure(options, conf)
+        self.open_browser = options.open_browser
         if not self.enabled:
             return
         
@@ -103,7 +106,12 @@ class NosePlugin(Plugin):
         self.root_dir_name = time.strftime("%Y_%m_%d__%H_%M_%S")
         os.mkdir(self.root_dir_name)
         
+        self.result_html_path = os.path.abspath(os.path.join(os.path.curdir, self.root_dir_name, "result.html"))
         self.create_html()
+        
+        if self.open_browser:
+            import webbrowser
+            webbrowser.open("file://" + self.result_html_path)
         
     def create_html(self):
         self.html_root = etree.Element("html")
@@ -136,7 +144,7 @@ class NosePlugin(Plugin):
         self.html_h1.text = "Status: %s" % (status,)
         self.html_h2_1.text = "[%d modules, %d suites, %d tests]" % (self.total_modules, self.total_suites, self.total_tests)
         self.html_h2_2.text = self.get_subtitle_label_for_html()
-        result_file = open(os.path.join(self.root_dir_name, "result.html"), "w")
+        result_file = open(self.result_html_path, "w")
         # note that we don't use method="html" in tostring because it doesn't do indentation correctly
         # Also, we use lxml.etree instead of the Python implementation because pretty_print is not available there
         html_string = etree.tostring(self.html_root, pretty_print=True)
