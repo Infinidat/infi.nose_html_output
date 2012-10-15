@@ -15,8 +15,7 @@ import sys
 import time
 
 from pkg_resources import resource_filename
-with open(resource_filename(__name__, "nose.head.html"), 'r') as fd:
-    head = fd.read()
+import shutil
 
 # copied from unittest/result.py
 def _is_relevant_tb_level(tb):
@@ -105,6 +104,7 @@ class NosePlugin(Plugin):
         
         self.root_dir_name = time.strftime("%Y_%m_%d__%H_%M_%S")
         os.mkdir(self.root_dir_name)
+        shutil.copytree(resource_filename(__name__, "static"), os.path.join(self.root_dir_name, "static"))
         
         self.result_html_path = os.path.abspath(os.path.join(os.path.curdir, self.root_dir_name, "result.html"))
         self.create_html()
@@ -112,10 +112,19 @@ class NosePlugin(Plugin):
         if self.open_browser:
             import webbrowser
             webbrowser.open("file://" + self.result_html_path)
-        
+            
+    def create_html_head(self):
+        html_head = etree.SubElement(self.html_root, "head")
+        script = etree.SubElement(html_head, "script", {"src": "static/jquery-1.8.0.min.js"})
+        script.text = " "
+        script = etree.SubElement(html_head, "script", {"src": "static/index.js"})
+        script.text = " "
+        script = etree.SubElement(html_head, "link", {"rel": "stylesheet", "type": "text/css", "href": "static/index.css"})
+        script.text = " "
+    
     def create_html(self):
         self.html_root = etree.Element("html")
-        html_head = etree.SubElement(self.html_root, "head")
+        self.create_html_head()
         self.html_body = etree.SubElement(self.html_root, "body")
         self.html_h1 = etree.SubElement(self.html_body, "div", {"class": "h1"})
         self.html_h2_1 = etree.SubElement(self.html_body, "div")
@@ -152,7 +161,6 @@ class NosePlugin(Plugin):
             html_string = str(html_string, "ascii")
         except TypeError:
             pass # python 2.x
-        html_string = html_string.replace("<head/>", "<head>" + head + "</head>")
         html_string = "<!DOCTYPE html>\n" + html_string # TODO maybe we can add the doctype with etree
         result_file.write(html_string)
         
