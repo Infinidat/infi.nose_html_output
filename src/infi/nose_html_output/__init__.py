@@ -17,6 +17,8 @@ import time
 from pkg_resources import resource_filename
 import shutil
 
+from ajax import AjaxServer
+
 # copied from unittest/result.py
 def _is_relevant_tb_level(tb):
     return '__unittest' in tb.tb_frame.f_globals
@@ -75,11 +77,16 @@ class NosePlugin(Plugin):
     def options(self, parser, env=os.environ):
         parser.add_option("--open-browser", action="store_true", default=False,
                          help="If speicified, the default browser will be opened with the result page")
+        parser.add_option("--use-ajax", action="store_true", default=False,
+                         help="If speicified, the output page will automatically reload during the test run when" +
+                                            "tests are updated. Note that this opens a local webserver and requires" +
+                                            "port 16193 to be open and available.")
         super(NosePlugin, self).options(parser, env=env)
 
     def configure(self, options, conf):
         super(NosePlugin, self).configure(options, conf)
-        self.open_browser = options.open_browser
+        self._open_browser = options.open_browser
+        self._use_ajax = options.use_ajax
         if not self.enabled:
             return
         
@@ -107,26 +114,35 @@ class NosePlugin(Plugin):
         shutil.copytree(resource_filename(__name__, "static"), os.path.join(self.root_dir_name, "static"))
         
         self.result_html_path = os.path.abspath(os.path.join(os.path.curdir, self.root_dir_name, "result.html"))
+        self._ajax_server = AjaxServer(self._use_ajax, self._open_browser, self.result_html_path, 16193)
         self.create_html()
-        
-        if self.open_browser:
-            import webbrowser
-            webbrowser.open("file://" + self.result_html_path)
-            
+        self._ajax_server.trigget_start()
+    
+    def add_html_script(self, script):
+        script = etree.SubElement(self.html_head, "script", {"src": script})
+        script.text = ' '
+        return script
     def create_html_head(self):
-        html_head = etree.SubElement(self.html_root, "head")
-        script = etree.SubElement(html_head, "script", {"src": "static/jquery-1.8.0.min.js"})
-        script.text = " "
-        script = etree.SubElement(html_head, "script", {"src": "static/index.js"})
-        script.text = " "
-        script = etree.SubElement(html_head, "link", {"rel": "stylesheet", "type": "text/css", "href": "static/index.css"})
+        self.html_head = etree.SubElement(self.html_root, "head")
+        self.add_html_script("static/jquery-1.8.0.min.js")
+        self.add_html_script("static/index.js")
+        if self._use_ajax:
+            self._ajax_scripts = []
+            self._ajax_scripts.append(self.add_html_script("static/ajax_reload.js"))
+            self._ajax_scripts.append(self.add_html_script("static/spin.min.js"))
+            self._ajax_scripts.append(self.add_html_script("static/spinner.factory.js"))
+        script = etree.SubElement(self.html_head, "link", {"rel": "stylesheet", "type": "text/css", "href": "static/index.css"})
         script.text = " "
     
     def create_html(self):
         self.html_root = etree.Element("html")
         self.create_html_head()
         self.html_body = etree.SubElement(self.html_root, "body")
-        self.html_h1 = etree.SubElement(self.html_body, "div", {"class": "h1"})
+        self.html_h1_parent = etree.SubElement(self.html_body, "div", {"class": "h1"})
+        if self._use_ajax:
+            self.html_spinner_element = etree.SubElement(self.html_h1_parent, "span", {"id": "running-spinner"})
+            self.html_spinner_element.text = ' '
+        self.html_h1 = etree.SubElement(self.html_h1_parent, "span")
         self.html_h2_1 = etree.SubElement(self.html_body, "div")
         self.html_h2_2 = etree.SubElement(self.html_body, "div")
         self.html_legend = etree.SubElement(self.html_body, "div", {"class": "legend"})
@@ -153,7 +169,6 @@ class NosePlugin(Plugin):
         self.html_h1.text = "Status: %s" % (status,)
         self.html_h2_1.text = "[%d modules, %d suites, %d tests]" % (self.total_modules, self.total_suites, self.total_tests)
         self.html_h2_2.text = self.get_subtitle_label_for_html()
-        result_file = open(self.result_html_path, "w")
         # note that we don't use method="html" in tostring because it doesn't do indentation correctly
         # Also, we use lxml.etree instead of the Python implementation because pretty_print is not available there
         html_string = etree.tostring(self.html_root, pretty_print=True)
@@ -162,7 +177,10 @@ class NosePlugin(Plugin):
         except TypeError:
             pass # python 2.x
         html_string = "<!DOCTYPE html>\n" + html_string # TODO maybe we can add the doctype with etree
+        result_file = open(self.result_html_path, "w")
         result_file.write(html_string)
+        result_file.close()
+        self._ajax_server.trigget_refresh()
         
     def add_html_actions(self, div_elem):
         actions_span = etree.SubElement(div_elem, "span", {"class": "actions"})
@@ -232,7 +250,11 @@ class NosePlugin(Plugin):
     def finalize(self, result):
         if self.status == "running":
             self.status = "failed" if (self.failed_tests > 0) else "passed"
+        if self._use_ajax:
+            [self.html_head.remove(ajax_script) for ajax_script in self._ajax_scripts]
+            self.html_h1_parent.remove(self.html_spinner_element)
         self.update_html()
+        self._ajax_server.trigger_end()
         
     def setLogger(self):
         try:

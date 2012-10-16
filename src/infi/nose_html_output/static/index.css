@@ -146,3 +146,9 @@ hr.module-separator {
     padding: 10px;
     margin-top: 5px;
 }
+
+#running-spinner {
+    width: 20px;
+    height: 20px;
+    display:inline-block;
+}
