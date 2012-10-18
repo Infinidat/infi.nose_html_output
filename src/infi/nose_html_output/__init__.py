@@ -15,8 +15,9 @@ import sys
 import time
 
 from pkg_resources import resource_filename
-with open(resource_filename(__name__, "nose.head.html"), 'rb') as fd:
-    head = fd.read()
+import shutil
+
+from ajax import AjaxServer
 
 # copied from unittest/result.py
 def _is_relevant_tb_level(tb):
@@ -50,7 +51,7 @@ class AutoStream(object):
     
     def write(self, buf):
         if self._file is None:
-            self._file = open(self._filename, "wb")
+            self._file = open(self._filename, "w")
             for callback in self._callback:
                 callback()
         self._file.write(buf)
@@ -74,10 +75,18 @@ class NosePlugin(Plugin):
     name = 'html-output'
 
     def options(self, parser, env=os.environ):
+        parser.add_option("--open-browser", action="store_true", default=False,
+                         help="If speicified, the default browser will be opened with the result page")
+        parser.add_option("--use-ajax", action="store_true", default=False,
+                         help="If speicified, the output page will automatically reload during the test run when" +
+                                            "tests are updated. Note that this opens a local webserver and requires" +
+                                            "port 16193 to be open and available.")
         super(NosePlugin, self).options(parser, env=env)
 
     def configure(self, options, conf):
         super(NosePlugin, self).configure(options, conf)
+        self._open_browser = options.open_browser
+        self._use_ajax = options.use_ajax
         if not self.enabled:
             return
         
@@ -102,14 +111,38 @@ class NosePlugin(Plugin):
         
         self.root_dir_name = time.strftime("%Y_%m_%d__%H_%M_%S")
         os.mkdir(self.root_dir_name)
+        shutil.copytree(resource_filename(__name__, "static"), os.path.join(self.root_dir_name, "static"))
         
+        self.result_html_path = os.path.abspath(os.path.join(os.path.curdir, self.root_dir_name, "result.html"))
+        self._ajax_server = AjaxServer(self._use_ajax, self._open_browser, self.result_html_path, 16193)
         self.create_html()
-        
+        self._ajax_server.trigget_start()
+    
+    def add_html_script(self, script):
+        script = etree.SubElement(self.html_head, "script", {"src": script})
+        script.text = ' '
+        return script
+    def create_html_head(self):
+        self.html_head = etree.SubElement(self.html_root, "head")
+        self.add_html_script("static/jquery-1.8.0.min.js")
+        self.add_html_script("static/index.js")
+        if self._use_ajax:
+            self._ajax_scripts = []
+            self._ajax_scripts.append(self.add_html_script("static/ajax_reload.js"))
+            self._ajax_scripts.append(self.add_html_script("static/spin.min.js"))
+            self._ajax_scripts.append(self.add_html_script("static/spinner.factory.js"))
+        script = etree.SubElement(self.html_head, "link", {"rel": "stylesheet", "type": "text/css", "href": "static/index.css"})
+        script.text = " "
+    
     def create_html(self):
         self.html_root = etree.Element("html")
-        html_head = etree.SubElement(self.html_root, "head")
+        self.create_html_head()
         self.html_body = etree.SubElement(self.html_root, "body")
-        self.html_h1 = etree.SubElement(self.html_body, "div", {"class": "h1"})
+        self.html_h1_parent = etree.SubElement(self.html_body, "div", {"class": "h1"})
+        if self._use_ajax:
+            self.html_spinner_element = etree.SubElement(self.html_h1_parent, "span", {"id": "running-spinner"})
+            self.html_spinner_element.text = ' '
+        self.html_h1 = etree.SubElement(self.html_h1_parent, "span")
         self.html_h2_1 = etree.SubElement(self.html_body, "div")
         self.html_h2_2 = etree.SubElement(self.html_body, "div")
         self.html_legend = etree.SubElement(self.html_body, "div", {"class": "legend"})
@@ -136,92 +169,99 @@ class NosePlugin(Plugin):
         self.html_h1.text = "Status: %s" % (status,)
         self.html_h2_1.text = "[%d modules, %d suites, %d tests]" % (self.total_modules, self.total_suites, self.total_tests)
         self.html_h2_2.text = self.get_subtitle_label_for_html()
-        result_file = open(os.path.join(self.root_dir_name, "result.html"), "wb")
         # note that we don't use method="html" in tostring because it doesn't do indentation correctly
         # Also, we use lxml.etree instead of the Python implementation because pretty_print is not available there
         html_string = etree.tostring(self.html_root, pretty_print=True)
-        html_string = html_string.replace("<head/>", "<head>%s</head>" % head)
+        try:
+            html_string = str(html_string, "ascii")
+        except TypeError:
+            pass # python 2.x
         html_string = "<!DOCTYPE html>\n" + html_string # TODO maybe we can add the doctype with etree
+        result_file = open(self.result_html_path, "w")
         result_file.write(html_string)
+        result_file.close()
+        self._ajax_server.trigget_refresh()
         
-    def add_html_code(self, tr):
-        td = etree.SubElement(tr, "td", {"class": "actions"})
-        self.html_code_link = etree.SubElement(td, "a", {"class": "code_link"})
+    def add_html_actions(self, div_elem):
+        actions_span = etree.SubElement(div_elem, "span", {"class": "actions"})
+        self.html_code_link = etree.SubElement(actions_span, "a", {"class": "code_link"})
         self.html_code_link.text = "C"
-        span = etree.SubElement(td, "span")
+        span = etree.SubElement(actions_span, "span")
         span.text = " "
-        self.html_desc_link = etree.SubElement(td, "a", {"class": "desc_link"})
+        self.html_desc_link = etree.SubElement(actions_span, "a", {"class": "desc_link"})
         self.html_desc_link.text = "D"
-        span = etree.SubElement(td, "span")
+        span = etree.SubElement(actions_span, "span")
         span.text = " "
-        self.html_log_link = etree.SubElement(td, "a", {"class": "log_link"})
+        self.html_log_link = etree.SubElement(actions_span, "a", {"class": "log_link"})
         self.html_log_link.text = "L"
     
     def add_desc(self, desc, elem):
         if desc is not None:
-            etree.SubElement(elem, "span")
             desc_div = etree.SubElement(elem, "div", {"style": "display: none", "class": "description"})
             desc_div.text = desc
             self.html_desc_link.attrib["href"] = "#"
             self.html_desc_link.attrib["class"] += " minitoggle"
     
     def add_html_module(self, name, desc, code):
-        self.html_module = etree.Element("table")
-        tr = etree.SubElement(self.html_module, "tr", {"class": "module"})
-        self.add_html_code(tr)
-        self.html_module_td = etree.SubElement(tr, "td", {"class": "module_name"})
-        toggle_a = etree.SubElement(self.html_module_td, "a", {"href": "#", "class": "toggle down-arrow"})
+        self.html_module = etree.Element("div", {"class": "module"})
+        module_row = etree.SubElement(self.html_module, "div", {"class": "module-row"})
+        self.add_html_actions(module_row)
+        self.html_module_span = etree.SubElement(module_row, "span", {"class": "module_name"})
+        toggle_a = etree.SubElement(self.html_module_span, "a", {"href": "#", "class": "toggle down-arrow"})
         toggle_a.text = ""
-        span = etree.SubElement(self.html_module_td, "span")
+        span = etree.SubElement(self.html_module_span, "span")
         span.text = " "
-        module_text = etree.SubElement(self.html_module_td, "span")
+        module_text = etree.SubElement(self.html_module_span, "span")
         module_text.text = name
-        self.add_desc(desc, self.html_module_td)
+        self.add_desc(desc, module_row)
         if code is not None:
             self.html_code_link.attrib["href"] = code
         self.update_html()
         
     def add_html_suite(self, name, desc, code):
-        self.html_suite_tr = etree.Element("tr", {"class": "suite"})
-        suite_td = etree.SubElement(self.html_suite_tr, "td")
-        self.html_suite = etree.SubElement(suite_td, "table")
-        tr = etree.SubElement(self.html_suite, "tr", {"class": "suite"})
-        self.add_html_code(tr)
-        self.html_suite_td = etree.SubElement(tr, "td", {"class": "suite_name"})
-        toggle_a = etree.SubElement(self.html_suite_td, "a", {"href": "#", "class": "toggle down-arrow"})
+        self.html_suite = etree.Element("div", {"class": "suite"})
+        suite_row = etree.SubElement(self.html_suite, "div", {"class": "suite-row"})
+        self.add_html_actions(suite_row)
+        self.html_suite_span = etree.SubElement(suite_row, "span", {"class": "suite_name"})
+        toggle_a = etree.SubElement(self.html_suite_span, "a", {"href": "#", "class": "toggle down-arrow"})
         toggle_a.text = ""
-        span = etree.SubElement(self.html_suite_td, "span")
+        span = etree.SubElement(self.html_suite_span, "span")
         span.text = " "
-        suite_text = etree.SubElement(self.html_suite_td, "span")
+        suite_text = etree.SubElement(self.html_suite_span, "span")
         suite_text.text = name
-        self.html_suite_test_tr = None
-        self.add_desc(desc, self.html_suite_td)
+        self.add_desc(desc, suite_row)
         if code is not None:
             self.html_code_link.attrib["href"] = code
         self.update_html()
         
     def add_html_test(self, name, desc, code):
-        if self.html_suite_test_tr is None:
-            self.html_suite_test_tr = etree.SubElement(self.html_suite, "tr")
-            td = etree.SubElement(self.html_suite_test_tr, "td")
-            self.html_test_table = etree.SubElement(td, "table")
-        tr = etree.SubElement(self.html_test_table, "tr")
-        self.add_html_code(tr)
-        self.html_cur_test_td = etree.SubElement(tr, "td", {"class": "test_name"})
-        self.html_cur_test_td.text = name
-        self.add_desc(desc, self.html_cur_test_td)
+        self.html_test = etree.SubElement(self.html_suite, "div", {"class": "test test-row"})
+        self.add_html_actions(self.html_test)
+        self.html_test_span = etree.SubElement(self.html_test, "span", {"class": "test_name"})
+        self.html_test_span.text = name
+        self.add_desc(desc, self.html_test)
         if code is not None:
             self.html_code_link.attrib["href"] = code
         self.update_html()
-        
+
+    def add_html_separator_hr(self, elem):
+        etree.SubElement(elem, "hr", {"class": "white-line"})
+
     def finalize(self, result):
         if self.status == "running":
             self.status = "failed" if (self.failed_tests > 0) else "passed"
+        if self._use_ajax:
+            [self.html_head.remove(ajax_script) for ajax_script in self._ajax_scripts]
+            self.html_h1_parent.remove(self.html_spinner_element)
         self.update_html()
+        self._ajax_server.trigger_end()
         
     def setLogger(self):
-        import StringIO
-        stream = StringIO.StringIO()
+        try:
+            from StringIO import StringIO
+        except ImportError:
+            from io import StringIO
+        stream = StringIO()
         format = logging.Formatter('%(name)s: %(levelname)s: %(message)s')
         self.log_handler = logging.StreamHandler(stream)
         self.log_handler.setFormatter(format)
@@ -263,14 +303,15 @@ class NosePlugin(Plugin):
     def append_module(self):
         if not self.module_appended:
             if self.total_modules > 0:
-                etree.SubElement(self.html_body_main, "hr")
+                etree.SubElement(self.html_body_main, "hr", {"class": "module-separator"})
             self.html_body_main.append(self.html_module)
             self.module_appended = True
             self.total_modules += 1
             
     def append_suite(self):
         if not self.suite_appended:
-            self.html_module.append(self.html_suite_tr)
+            self.add_html_separator_hr(self.html_module)
+            self.html_module.append(self.html_suite)
             self.suite_appended = True
             self.total_suites += 1
             
@@ -322,7 +363,7 @@ class NosePlugin(Plugin):
         self.startX()
         self.log_stream[-1].add_callback(self.append_module)
         self.add_html_module(name, desc, code)
-        self.html_module_td.attrib["class"] = "module_name module_" + self.res[-1]
+        self.html_module_span.attrib["class"] = "module_name module_" + self.res[-1]
         self.module_appended = False
     def stopModule(self, module):
         res = self.stopX()
@@ -330,7 +371,7 @@ class NosePlugin(Plugin):
             self.skipped_modules += 1
         elif self.module_failed_suites > 0:
             res = "failed"
-        self.html_module_td.attrib["class"] = "module_name module_" + res
+        self.html_module_span.attrib["class"] = "module_name module_" + res
         self.update_html()
     def startSuite(self, suite):
         name = self.name[-1] + "." + suite.__name__
@@ -342,7 +383,7 @@ class NosePlugin(Plugin):
         self.suite_appended = False
         self.log_stream[-1].add_callback(self.append_suite)
         self.add_html_suite(name, desc, code)
-        self.html_suite_td.attrib["class"] = "suite_name suite_" + self.res[-1]
+        self.html_suite_span.attrib["class"] = "suite_name suite_" + self.res[-1]
     def stopSuite(self, suite):
         res = self.stopX()
         if res == "skipped":
@@ -352,7 +393,7 @@ class NosePlugin(Plugin):
         if res == "failed":
             self.module_failed_suites += 1
         self.update_html()
-        self.html_suite_td.attrib["class"] = "suite_name suite_" + res
+        self.html_suite_span.attrib["class"] = "suite_name suite_" + res
     def startTest(self, test):
         mymeth = test.test.__getattribute__(test.test._testMethodName)
         name = test.id()
@@ -363,9 +404,10 @@ class NosePlugin(Plugin):
         self.append_suite()
         self.name.append(name)
         self.total_tests += 1
+        self.add_html_separator_hr(self.html_suite)
         self.startX()
         self.add_html_test(name, desc, code)
-        self.html_cur_test_td.attrib["class"] = "test_name test_" + self.res[-1]
+        self.html_test_span.attrib["class"] = "test_name test_" + self.res[-1]
         self.update_html()
     def stopTest(self, test):
         res = self.stopX()
@@ -374,6 +416,6 @@ class NosePlugin(Plugin):
         elif res == "failed":
             self.failed_tests += 1
             self.suite_failed_tests += 1
-        self.html_cur_test_td.attrib["class"] = "test_name test_" + res
+        self.html_test_span.attrib["class"] = "test_name test_" + res
         self.update_html()
 
