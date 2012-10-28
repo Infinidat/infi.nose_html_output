@@ -70,6 +70,11 @@ class MultiStream(object):
     def write(self, buf):
         for stream in self.streams:
             stream.write(buf)
+    
+    def flush(self):
+        for stream in self.streams:
+            stream.flush()
+        
 
 class NosePlugin(Plugin):
     name = 'html-output'
