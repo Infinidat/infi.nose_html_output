@@ -74,7 +74,6 @@ class MultiStream(object):
     def flush(self):
         for stream in self.streams:
             stream.flush()
-        
 
 class NosePlugin(Plugin):
     name = 'html-output'
@@ -175,13 +174,13 @@ class NosePlugin(Plugin):
         self.html_h2_1.text = "[%d modules, %d suites, %d tests]" % (self.total_modules, self.total_suites, self.total_tests)
         self.html_h2_2.text = self.get_subtitle_label_for_html()
         # note that we don't use method="html" in tostring because it doesn't do indentation correctly
-        # Also, we use lxml.etree instead of the Python implementation because pretty_print is not available there
-        html_string = etree.tostring(self.html_root, pretty_print=True)
+        # Also, we use lxml.etree instead of the Python implementation because pretty_print (and other parameters)
+        # are not available there
+        html_string = etree.tostring(self.html_root, pretty_print=True, doctype="<!DOCTYPE html>")
         try:
             html_string = str(html_string, "ascii")
         except TypeError:
             pass # python 2.x
-        html_string = "<!DOCTYPE html>\n" + html_string # TODO maybe we can add the doctype with etree
         result_file = open(self.result_html_path, "w")
         result_file.write(html_string)
         result_file.close()
