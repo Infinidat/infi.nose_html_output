@@ -337,6 +337,8 @@ class NosePlugin(Plugin):
             logname = os.path.join(logname, test_path_name.replace(log_trail, ''))
             log_trail = test_path_name + '.'
         logname += ".txt"
+        for bad_char in "\\/:*?\"'<>|":
+            logname = logname.replace(bad_char, '')
         log_path = os.path.join(self.root_dir_name, logname)
         dirname = os.path.dirname(log_path)
         if dirname and not os.path.exists(dirname):
