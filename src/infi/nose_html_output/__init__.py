@@ -44,6 +44,7 @@ def _exc_info_to_string(err, test):
     return ''.join(msgLines)
 
 class AutoStream(object):
+    """ File stream that creates the file on demand """
     def __init__(self, filename):
         self._filename = filename
         self._file = None
@@ -324,7 +325,8 @@ class NosePlugin(Plugin):
         self.html_log_link.attrib["href"] = self.log_name[-1]
         self.update_html()
          
-    def startX(self):
+    def startX(self, name):
+        self.name.append(name)
         for stream in self.log_stream:
             stream.flush()
         self.res.append("running")
@@ -334,7 +336,7 @@ class NosePlugin(Plugin):
         for test_path_name in self.name:
             logname = os.path.join(logname, test_path_name.replace(log_trail, ''))
             log_trail = test_path_name + '.'
-        logname = os.path.join(*self.name) + ".txt"
+        logname += ".txt"
         log_path = os.path.join(self.root_dir_name, logname)
         dirname = os.path.dirname(log_path)
         if dirname and not os.path.exists(dirname):
@@ -347,14 +349,19 @@ class NosePlugin(Plugin):
         self.stdouts.append(sys.stdout)
         sys.stdout = MultiStream([self.stdouts[0], self.log_stream[-1]])
         
-    def stopX(self):
+    def stopX(self, name):
         res = self.res.pop()
         if res == "running":
             res = "passed"
         trace = self.trace.pop()
         log_stream = self.log_stream.pop()
         self.log_handler.stream = self.log_stream[-1]
-        self.name.pop()
+        popped_name = self.name.pop()
+        # we don't get "stop" for some suites, so we need to make sure we're popping the name stack
+        # until we pop the name of the currently stopped context. we use endswith because for suites we
+        # add a prefix in the name stack which won't be in the "name" parameter
+        while not popped_name.endswith(name):
+            popped_name = self.name.pop()
         if trace is not None:
             log_stream.write(trace)
         sys.stdout = self.stdouts.pop()
@@ -368,15 +375,14 @@ class NosePlugin(Plugin):
         name = module.__name__
         desc = module.__doc__
         code = self.suite_code
-        self.name.append(name)
         self.module_failed_suites = 0
-        self.startX()
+        self.startX(name)
         self.log_stream[-1].add_callback(self.append_module)
         self.add_html_module(name, desc, code)
         self.html_module_span.attrib["class"] = "module_name module_" + self.res[-1]
         self.module_appended = False
     def stopModule(self, module):
-        res = self.stopX()
+        res = self.stopX(module.__name__)
         if res == "skipped":
             self.skipped_modules += 1
         elif self.module_failed_suites > 0:
@@ -388,14 +394,13 @@ class NosePlugin(Plugin):
         desc = suite.__doc__
         code = self.suite_code
         self.suite_failed_tests = 0
-        self.name.append(name)
-        self.startX()
+        self.startX(name)
         self.suite_appended = False
         self.log_stream[-1].add_callback(self.append_suite)
         self.add_html_suite(name, desc, code)
         self.html_suite_span.attrib["class"] = "suite_name suite_" + self.res[-1]
     def stopSuite(self, suite):
-        res = self.stopX()
+        res = self.stopX(suite.__name__)
         if res == "skipped":
             self.skipped_suites += 1
         elif self.suite_failed_tests > 0:
@@ -412,15 +417,14 @@ class NosePlugin(Plugin):
         code = self.suite_code
         self.append_module()
         self.append_suite()
-        self.name.append(name)
         self.total_tests += 1
         self.add_html_separator_hr(self.html_suite)
-        self.startX()
+        self.startX(name)
         self.add_html_test(name, desc, code)
         self.html_test_span.attrib["class"] = "test_name test_" + self.res[-1]
         self.update_html()
     def stopTest(self, test):
-        res = self.stopX()
+        res = self.stopX(test.id())
         if res == "skipped":
             self.skipped_tests += 1
         elif res == "failed":
