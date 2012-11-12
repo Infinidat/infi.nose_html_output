@@ -114,10 +114,11 @@ class NosePlugin(Plugin):
         self.status = "running"
         
         self.root_dir_name = time.strftime("%Y_%m_%d__%H_%M_%S")
+        self.root_dir_name = os.path.abspath(os.path.join(os.path.curdir, self.root_dir_name))
         os.mkdir(self.root_dir_name)
         shutil.copytree(resource_filename(__name__, "static"), os.path.join(self.root_dir_name, "static"))
         
-        self.result_html_path = os.path.abspath(os.path.join(os.path.curdir, self.root_dir_name, "result.html"))
+        self.result_html_path = os.path.join(self.root_dir_name, "result.html")
         self._ajax_server = AjaxServer(self._use_ajax, self._open_browser, self.result_html_path, 16193)
         self.create_html()
         self._ajax_server.trigget_start()
@@ -328,6 +329,11 @@ class NosePlugin(Plugin):
             stream.flush()
         self.res.append("running")
         self.trace.append(None)
+        logname = ''
+        log_trail = ''
+        for test_path_name in self.name:
+            logname = os.path.join(logname, test_path_name.replace(log_trail, ''))
+            log_trail = test_path_name + '.'
         logname = os.path.join(*self.name) + ".txt"
         log_path = os.path.join(self.root_dir_name, logname)
         dirname = os.path.dirname(log_path)
