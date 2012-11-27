@@ -19,6 +19,14 @@ import shutil
 
 from ajax import AjaxServer
 
+try:
+    from StringIO import StringIO
+    from urllib import pathname2url
+except ImportError:
+    # Python 3.x
+    from io import StringIO
+    from urllib.request import pathname2url
+
 # copied from unittest/result.py
 def _is_relevant_tb_level(tb):
     return '__unittest' in tb.tb_frame.f_globals
@@ -263,10 +271,6 @@ class NosePlugin(Plugin):
         self._ajax_server.trigger_end()
         
     def setLogger(self):
-        try:
-            from StringIO import StringIO
-        except ImportError:
-            from io import StringIO
         stream = StringIO()
         format = logging.Formatter('%(name)s: %(levelname)s: %(message)s')
         self.log_handler = logging.StreamHandler(stream)
@@ -371,7 +375,7 @@ class NosePlugin(Plugin):
         return res
             
     def startModule(self, module):
-        self.suite_code = "file://localhost" + module.__file__
+        self.suite_code = "file:" + pathname2url(module.__file__)
         if self.suite_code.endswith(".pyc"):
             self.suite_code = self.suite_code[:-1]
         name = module.__name__
