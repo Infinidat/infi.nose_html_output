@@ -121,6 +121,7 @@ class NosePlugin(Plugin):
         self.setLogger()
         
         self.status = "running"
+        self._start_time = time.time()
         
         self.root_dir_name = time.strftime("%Y_%m_%d__%H_%M_%S")
         self.root_dir_name = os.path.abspath(os.path.join(os.path.curdir, self.root_dir_name))
@@ -180,8 +181,9 @@ class NosePlugin(Plugin):
         
     def update_html(self):
         status = {"running": "Running...", "failed": "FAILED", "passed": "OK"}[self.status]
+        elapsed_time = time.time() - self._start_time
         self.html_h1.text = "Status: %s" % (status,)
-        self.html_h2_1.text = "[%d modules, %d suites, %d tests]" % (self.total_modules, self.total_suites, self.total_tests)
+        self.html_h2_1.text = "%d modules, %d suites, %d tests [elapsed time: %d seconds]" % (self.total_modules, self.total_suites, self.total_tests, elapsed_time)
         self.html_h2_2.text = self.get_subtitle_label_for_html()
         # note that we don't use method="html" in tostring because it doesn't do indentation correctly
         # Also, we use lxml.etree instead of the Python implementation because pretty_print (and other parameters)
