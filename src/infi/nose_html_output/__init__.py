@@ -13,6 +13,7 @@ import logging
 import lxml.etree as etree
 import sys
 import time
+import re
 
 from pkg_resources import resource_filename
 import shutil
@@ -366,6 +367,9 @@ class NosePlugin(Plugin):
         log_stream = self.log_stream.pop()
         self.log_handler.stream = self.log_stream[-1]
         popped_name = self.name.pop()
+        # ignore parameters in name
+        name = re.sub("\(.*\)", "", name)
+        popped_name = re.sub("\(.*\)", "", popped_name)
         # we don't get "stop" for some suites, so we need to make sure we're popping the name stack
         # until we pop the name of the currently stopped context. we use endswith because for suites we
         # add a prefix in the name stack which won't be in the "name" parameter
