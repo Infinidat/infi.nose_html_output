@@ -132,7 +132,7 @@ class NosePlugin(Plugin):
         self.result_html_path = os.path.join(self.root_dir_name, "result.html")
         self._ajax_server = AjaxServer(self._use_ajax, self._open_browser, self.result_html_path, 16193)
         self.create_html()
-        self._ajax_server.trigget_start()
+        self._ajax_server.trigger_start()
     
     def add_html_script(self, script):
         script = etree.SubElement(self.html_head, "script", {"src": script})
@@ -156,7 +156,7 @@ class NosePlugin(Plugin):
         self.html_body = etree.SubElement(self.html_root, "body")
         self.html_h1_parent = etree.SubElement(self.html_body, "div", {"class": "h1"})
         if self._use_ajax:
-            self.html_spinner_element = etree.SubElement(self.html_h1_parent, "span", {"id": "running-spinner"})
+            self.html_spinner_element = etree.SubElement(self.html_h1_parent, "div", {"id": "running-spinner"})
             self.html_spinner_element.text = ' '
         self.html_h1 = etree.SubElement(self.html_h1_parent, "span")
         self.html_h2_1 = etree.SubElement(self.html_body, "div")
@@ -197,7 +197,8 @@ class NosePlugin(Plugin):
         result_file = open(self.result_html_path, "w")
         result_file.write(html_string)
         result_file.close()
-        self._ajax_server.trigget_refresh()
+        body_string = etree.tostring(self.html_body, pretty_print=True)
+        self._ajax_server.trigger_refresh(body_string)
         
     def add_html_actions(self, div_elem):
         actions_span = etree.SubElement(div_elem, "span", {"class": "actions"})

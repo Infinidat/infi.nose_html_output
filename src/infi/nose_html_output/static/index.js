@@ -1,5 +1,5 @@
-$(document).ready(function() {
-    var toggle_foreach = function(index, element) {
+function document_load() {
+        var toggle_foreach = function(index, element) {
         var func = function() {
             $('div', $(element).parent().parent().parent()).next().next().toggle();
             $('div', $(element).parent().parent().parent()).next().toggle();
@@ -29,4 +29,8 @@ $(document).ready(function() {
     // auto-toggle passed suites and modules
     $(".toggle", $(".suite_passed").parent()).click();
     $(".toggle", $(".module_passed").parent()).click();
+}
+
+$(document).ready(function() {
+    document_load();
 });
