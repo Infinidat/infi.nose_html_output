@@ -22,6 +22,13 @@ def get_ajax_handler_class(queue, file_path):
     # only way to pass parameters to the handler class is by returning it from a function
     
     class AjaxHandler(BaseHTTPRequestHandler):
+        def process_request(self, request, client_address):
+            import socket
+            try:
+                return super(AjaxHandler, self).process_request(request, client_address)
+            except socket.error:
+                pass
+            
         def do_GET(self):
             import json
             queue_param = queue.get()
