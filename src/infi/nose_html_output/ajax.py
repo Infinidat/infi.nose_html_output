@@ -13,19 +13,33 @@ import os
 import shutil
 
 # we send this via JSONP to the local file js to run
-REFRESH_JS = "document.location.reload(true);"
+REFRESH_JS = """$(document.body).html('{}');
+document_load();"""
+RELOAD_JS = """run_spinner();
+$.ajax({url: "http://localhost:16193/", crossDomain: true, dataType: "jsonp"});"""
 
 def get_ajax_handler_class(queue, file_path):
     # only way to pass parameters to the handler class is by returning it from a function
     
     class AjaxHandler(BaseHTTPRequestHandler):
+        def process_request(self, request, client_address):
+            import socket
+            try:
+                return super(AjaxHandler, self).process_request(request, client_address)
+            except socket.error:
+                pass
+            
         def do_GET(self):
             import json
-            result = queue.get()
+            queue_param = queue.get()
             while not queue.empty():
-                result = queue.get()
+                queue_param = queue.get()
+            html_str, end = queue_param
+            result = REFRESH_JS.format(html_str.replace("'", r"\'").replace('\n', '\\n'));
+            if not end:
+                result += RELOAD_JS
             self.send_response(200)
-            self.send_header("Content-type", "text/js")
+            self.send_header("Content-type", "text/javascript")
             self.send_header("Content-length", len(result))
             self.end_headers()
             try:
@@ -48,6 +62,7 @@ class AjaxServer(object):
         self._port = port
         self._local_file = os.path.abspath(local_file)
         self._queue = Queue()
+        self._last_html_str = ""#open(local_file, "rb").read()
         self._bind_address = 'localhost'
         self._url_to_localfile = 'file:' + pathname2url(self._local_file)
         self._url_to_webfile = 'http://%s:%s/%s' % (self._bind_address, self._port, os.path.basename(self._local_file))
@@ -68,7 +83,7 @@ class AjaxServer(object):
         thread.daemon = True
         thread.start()
 
-    def trigget_start(self):
+    def trigger_start(self):
         if self._use_ajax:
             self._start_server()
         if self._do_open_browser:
@@ -77,21 +92,23 @@ class AjaxServer(object):
             else:
                 self._open_browser(self._url_to_localfile, 0)
 
-    def trigget_refresh(self):
+    def trigger_refresh(self, html_str=None, end=False):
+        if html_str is not None:
+            self._last_html_str = html_str
         if self._use_ajax:
-            self._queue.put(REFRESH_JS)
+            self._queue.put((self._last_html_str, end))
 
     def trigger_end(self):
-        self.trigget_refresh()
+        self.trigger_refresh(end=True)
         if self._use_ajax:
             self._server.shutdown()
 
 def test():
     server = AjaxServer(True, True, "index.html", 16193)
-    server.trigget_start()
+    server.trigger_start()
     import time
     time.sleep(5)
-    server.trigget_refresh()
+    server.trigger_refresh()
     time.sleep(5)
     server.trigger_end()
 

@@ -64,6 +64,10 @@ var spinnerFactory = {
 
 };
 
-$(document).ready(function() {
+function run_spinner() {
     spinnerFactory.create($("#running-spinner"), "tiny");
+}
+
+$(document).ready(function() {
+    run_spinner();
 });

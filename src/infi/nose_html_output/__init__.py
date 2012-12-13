@@ -13,6 +13,7 @@ import logging
 import lxml.etree as etree
 import sys
 import time
+import re
 
 from pkg_resources import resource_filename
 import shutil
@@ -121,6 +122,7 @@ class NosePlugin(Plugin):
         self.setLogger()
         
         self.status = "running"
+        self._start_time = time.time()
         
         self.root_dir_name = time.strftime("%Y_%m_%d__%H_%M_%S")
         self.root_dir_name = os.path.abspath(os.path.join(os.path.curdir, self.root_dir_name))
@@ -130,7 +132,7 @@ class NosePlugin(Plugin):
         self.result_html_path = os.path.join(self.root_dir_name, "result.html")
         self._ajax_server = AjaxServer(self._use_ajax, self._open_browser, self.result_html_path, 16193)
         self.create_html()
-        self._ajax_server.trigget_start()
+        self._ajax_server.trigger_start()
     
     def add_html_script(self, script):
         script = etree.SubElement(self.html_head, "script", {"src": script})
@@ -154,7 +156,7 @@ class NosePlugin(Plugin):
         self.html_body = etree.SubElement(self.html_root, "body")
         self.html_h1_parent = etree.SubElement(self.html_body, "div", {"class": "h1"})
         if self._use_ajax:
-            self.html_spinner_element = etree.SubElement(self.html_h1_parent, "span", {"id": "running-spinner"})
+            self.html_spinner_element = etree.SubElement(self.html_h1_parent, "div", {"id": "running-spinner"})
             self.html_spinner_element.text = ' '
         self.html_h1 = etree.SubElement(self.html_h1_parent, "span")
         self.html_h2_1 = etree.SubElement(self.html_body, "div")
@@ -180,8 +182,9 @@ class NosePlugin(Plugin):
         
     def update_html(self):
         status = {"running": "Running...", "failed": "FAILED", "passed": "OK"}[self.status]
+        elapsed_time = time.time() - self._start_time
         self.html_h1.text = "Status: %s" % (status,)
-        self.html_h2_1.text = "[%d modules, %d suites, %d tests]" % (self.total_modules, self.total_suites, self.total_tests)
+        self.html_h2_1.text = "%d modules, %d suites, %d tests [elapsed time: %d seconds]" % (self.total_modules, self.total_suites, self.total_tests, elapsed_time)
         self.html_h2_2.text = self.get_subtitle_label_for_html()
         # note that we don't use method="html" in tostring because it doesn't do indentation correctly
         # Also, we use lxml.etree instead of the Python implementation because pretty_print (and other parameters)
@@ -194,7 +197,8 @@ class NosePlugin(Plugin):
         result_file = open(self.result_html_path, "w")
         result_file.write(html_string)
         result_file.close()
-        self._ajax_server.trigget_refresh()
+        body_string = etree.tostring(self.html_body, pretty_print=True)
+        self._ajax_server.trigger_refresh(body_string)
         
     def add_html_actions(self, div_elem):
         actions_span = etree.SubElement(div_elem, "span", {"class": "actions"})
@@ -338,11 +342,12 @@ class NosePlugin(Plugin):
         logname = ''
         log_trail = ''
         for test_path_name in self.name:
-            logname = os.path.join(logname, test_path_name.replace(log_trail, ''))
+            for bad_char in "\\/:*?\"'<>|":
+                test_path_name = test_path_name.replace(bad_char, '')
+            test_path_name = test_path_name.replace(log_trail, '')
+            logname = os.path.join(logname, test_path_name)
             log_trail = test_path_name + '.'
         logname += ".txt"
-        for bad_char in "\\/:*?\"'<>|":
-            logname = logname.replace(bad_char, '')
         log_path = os.path.join(self.root_dir_name, logname)
         dirname = os.path.dirname(log_path)
         if dirname and not os.path.exists(dirname):
@@ -363,6 +368,9 @@ class NosePlugin(Plugin):
         log_stream = self.log_stream.pop()
         self.log_handler.stream = self.log_stream[-1]
         popped_name = self.name.pop()
+        # ignore parameters in name
+        name = re.sub("\(.*\)", "", name)
+        popped_name = re.sub("\(.*\)", "", popped_name)
         # we don't get "stop" for some suites, so we need to make sure we're popping the name stack
         # until we pop the name of the currently stopped context. we use endswith because for suites we
         # add a prefix in the name stack which won't be in the "name" parameter
