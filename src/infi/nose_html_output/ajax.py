@@ -13,10 +13,10 @@ import os
 import shutil
 
 # we send this via JSONP to the local file js to run
-REFRESH_JS = """$(document.body).html('{}');
+REFRESH_JS = """do_refresh('{}');
 document_load();"""
 RELOAD_JS = """run_spinner();
-$.ajax({url: "http://localhost:16193/", crossDomain: true, dataType: "jsonp"});"""
+do_ajax_reload();"""
 
 def get_ajax_handler_class(queue, file_path):
     # only way to pass parameters to the handler class is by returning it from a function
