@@ -13,50 +13,46 @@ import os
 import shutil
 
 # we send this via JSONP to the local file js to run
-REFRESH_JS = """$(document.body).html('{}');
+REFRESH_JS = """do_refresh('{}');
 document_load();"""
 RELOAD_JS = """run_spinner();
-$.ajax({url: "http://localhost:16193/", crossDomain: true, dataType: "jsonp"});"""
+do_ajax_reload();"""
 
-def get_ajax_handler_class(queue, file_path):
-    # only way to pass parameters to the handler class is by returning it from a function
+class AjaxHandler(BaseHTTPRequestHandler):
+    queue = None
     
-    class AjaxHandler(BaseHTTPRequestHandler):
-        def process_request(self, request, client_address):
-            import socket
-            try:
-                return super(AjaxHandler, self).process_request(request, client_address)
-            except socket.error:
-                pass
+    def process_request(self, request, client_address):
+        import socket
+        try:
+            return super(AjaxHandler, self).process_request(request, client_address)
+        except socket.error:
+            pass
+        
+    def do_GET(self):
+        import json
+        queue_param = self.queue.get()
+        while not queue.empty():
+            queue_param = self.queue.get()
+        html_str, end = queue_param
+        result = REFRESH_JS.format(html_str.replace("'", r"\'").replace('\n', '\\n'));
+        if not end:
+            result += RELOAD_JS
+        self.send_response(200)
+        self.send_header("Content-type", "text/javascript")
+        self.send_header("Content-length", len(result))
+        self.end_headers()
+        try:
+            self.wfile.write(bytes(str(result), "ascii"))
+        except TypeError:
+            # python 2.7
+            self.wfile.write(str(result))
+        self.wfile.close()
             
-        def do_GET(self):
-            import json
-            queue_param = queue.get()
-            while not queue.empty():
-                queue_param = queue.get()
-            html_str, end = queue_param
-            result = REFRESH_JS.format(html_str.replace("'", r"\'").replace('\n', '\\n'));
-            if not end:
-                result += RELOAD_JS
-            self.send_response(200)
-            self.send_header("Content-type", "text/javascript")
-            self.send_header("Content-length", len(result))
-            self.end_headers()
-            try:
-                self.wfile.write(bytes(str(result), "ascii"))
-            except TypeError:
-                # python 2.7
-                self.wfile.write(str(result))
-            self.wfile.close()
-                
-        def log_message(self, format, *args):
-            return
-                
-    return AjaxHandler
-
+    def log_message(self, format, *args):
+        return
+            
 class AjaxServer(object):
     def __init__(self, use_ajax, do_open_browser, local_file, port):
-        global file_path
         self._use_ajax = use_ajax
         self._do_open_browser = do_open_browser
         self._port = port
@@ -76,7 +72,8 @@ class AjaxServer(object):
 
     def _start_server(self):
         server_address = (self._bind_address, self._port)
-        self._server = HTTPServer(server_address, get_ajax_handler_class(self._queue, self._local_file))
+        AjaxHandler.queue = self._queue
+        self._server = HTTPServer(server_address, AjaxHandler)
         def _start_server():
             self._server.serve_forever()
         thread = threading.Thread(target=_start_server)
