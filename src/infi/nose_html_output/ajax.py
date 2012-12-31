@@ -31,7 +31,7 @@ class AjaxHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         import json
         queue_param = self.queue.get()
-        while not queue.empty():
+        while not self.queue.empty():
             queue_param = self.queue.get()
         html_str, end = queue_param
         result = REFRESH_JS.format(html_str.replace("'", r"\'").replace('\n', '\\n'));
