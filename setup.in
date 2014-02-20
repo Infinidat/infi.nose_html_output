@@ -28,12 +28,11 @@ SETUP_INFO = dict(
     include_package_data = True,
     zip_safe = False,
 
-    entry_points = {
-        'console_scripts': ${project:console_scripts},
-        'gui_scripts': ${project:gui_scripts},
-        'nose.plugins.0.10': ['${project:name} = ${project:name}:NosePlugin', ],
-        },
-    )
+    entry_points = dict(
+        console_scripts = ${project:console_scripts},
+        gui_scripts = ${project:gui_scripts},
+        ),
+)
 
 if SETUP_INFO['url'] is None:
     _ = SETUP_INFO.pop('url')
