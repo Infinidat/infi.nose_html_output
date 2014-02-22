@@ -54,3 +54,4 @@ buildout.in
 
 src/infi/nose_html_output/__version__.py
 bootstrap.py
+.cache
