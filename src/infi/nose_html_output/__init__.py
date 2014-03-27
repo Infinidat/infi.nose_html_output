@@ -1,9 +1,6 @@
 __import__("pkg_resources").declare_namespace(__name__)
 
-import nose
 from nose.plugins import Plugin
-import nose.suite
-import nose.case
 from nose.util import isclass
 from nose.plugins.logcapture import MyMemoryHandler
 
@@ -58,17 +55,17 @@ class AutoStream(object):
         self._filename = filename
         self._file = None
         self._callback = []
-    
+
     def write(self, buf):
         if self._file is None:
             self._file = open(self._filename, "w")
             for callback in self._callback:
                 callback()
         self._file.write(buf)
-        
+
     def add_callback(self, callback):
         self._callback.append(callback)
-        
+
     def flush(self):
         if self._file is not None:
             self._file.flush()
@@ -76,11 +73,11 @@ class AutoStream(object):
 class MultiStream(object):
     def __init__(self, streams):
         self.streams = streams
-        
+
     def write(self, buf):
         for stream in self.streams:
             stream.write(buf)
-    
+
     def flush(self):
         for stream in self.streams:
             stream.flush()
@@ -103,7 +100,7 @@ class NosePlugin(Plugin):
         self._use_ajax = options.use_ajax
         if not self.enabled:
             return
-        
+
     def begin(self):
         self.total_tests = 0
         self.total_suites = 0
@@ -112,7 +109,7 @@ class NosePlugin(Plugin):
         self.skipped_suites = 0
         self.skipped_tests = 0
         self.failed_tests = 0
-        
+
         self.res = []           # result (string) of latest module\suite\test
         self.trace = []         # traceback of latest module\suite\test
         self.log_name = []
@@ -120,20 +117,20 @@ class NosePlugin(Plugin):
         self.name = []          # name of latest module\suite\test
         self.stdouts = []
         self.setLogger()
-        
+
         self.status = "running"
         self._start_time = time.time()
-        
+
         self.root_dir_name = time.strftime("%Y_%m_%d__%H_%M_%S")
         self.root_dir_name = os.path.abspath(os.path.join(os.path.curdir, self.root_dir_name))
         os.mkdir(self.root_dir_name)
         shutil.copytree(resource_filename(__name__, "static"), os.path.join(self.root_dir_name, "static"))
-        
+
         self.result_html_path = os.path.join(self.root_dir_name, "result.html")
         self._ajax_server = AjaxServer(self._use_ajax, self._open_browser, self.result_html_path, 16193)
         self.create_html()
         self._ajax_server.trigger_start()
-    
+
     def add_html_script(self, script):
         script = etree.SubElement(self.html_head, "script", {"src": script})
         script.text = ' '
@@ -149,7 +146,7 @@ class NosePlugin(Plugin):
             self._ajax_scripts.append(self.add_html_script("static/spinner.factory.js"))
         script = etree.SubElement(self.html_head, "link", {"rel": "stylesheet", "type": "text/css", "href": "static/index.css"})
         script.text = " "
-    
+
     def create_html(self):
         self.html_root = etree.Element("html")
         self.create_html_head()
@@ -163,11 +160,11 @@ class NosePlugin(Plugin):
         self.html_h2_2 = etree.SubElement(self.html_body, "div")
         self.html_legend = etree.SubElement(self.html_body, "div", {"class": "legend"})
         self.html_legend.text = "C = Code | D = Description | L = Log"
-        br = etree.SubElement(self.html_body, "br")
+        etree.SubElement(self.html_body, "br")
         self.html_body_main = etree.SubElement(self.html_body, "div", {"id": "main"})
         etree.SubElement(self.html_body, "br")
         self.update_html()
-    
+
     def get_subtitle_label_for_html(self):
         sub_labels = []
         if self.skipped_modules > 0:
@@ -179,7 +176,7 @@ class NosePlugin(Plugin):
         if self.failed_tests > 0:
             sub_labels.append("%d tests failed" % self.failed_tests)
         return ", ".join(sub_labels)
-        
+
     def update_html(self):
         status = {"running": "Running...", "failed": "FAILED", "passed": "OK"}[self.status]
         elapsed_time = time.time() - self._start_time
@@ -193,13 +190,13 @@ class NosePlugin(Plugin):
         try:
             html_string = str(html_string, "ascii")
         except TypeError:
-            pass # python 2.x
+            pass  # python 2.x
         result_file = open(self.result_html_path, "w")
         result_file.write(html_string)
         result_file.close()
         body_string = etree.tostring(self.html_body, pretty_print=True)
         self._ajax_server.trigger_refresh(body_string)
-        
+
     def add_html_actions(self, div_elem):
         actions_span = etree.SubElement(div_elem, "span", {"class": "actions"})
         self.html_code_link = etree.SubElement(actions_span, "a", {"class": "code_link"})
@@ -212,14 +209,14 @@ class NosePlugin(Plugin):
         span.text = " "
         self.html_log_link = etree.SubElement(actions_span, "a", {"class": "log_link"})
         self.html_log_link.text = "L"
-    
+
     def add_desc(self, desc, elem):
         if desc is not None:
             desc_div = etree.SubElement(elem, "div", {"style": "display: none", "class": "description"})
             desc_div.text = desc
             self.html_desc_link.attrib["href"] = "#"
             self.html_desc_link.attrib["class"] += " minitoggle"
-    
+
     def add_html_module(self, name, desc, code):
         self.html_module = etree.Element("div", {"class": "module"})
         module_row = etree.SubElement(self.html_module, "div", {"class": "module-row"})
@@ -235,7 +232,7 @@ class NosePlugin(Plugin):
         if code is not None:
             self.html_code_link.attrib["href"] = code
         self.update_html()
-        
+
     def add_html_suite(self, name, desc, code):
         self.html_suite = etree.Element("div", {"class": "suite"})
         suite_row = etree.SubElement(self.html_suite, "div", {"class": "suite-row"})
@@ -251,7 +248,7 @@ class NosePlugin(Plugin):
         if code is not None:
             self.html_code_link.attrib["href"] = code
         self.update_html()
-        
+
     def add_html_test(self, name, desc, code):
         self.html_test = etree.SubElement(self.html_suite, "div", {"class": "test test-row"})
         self.add_html_actions(self.html_test)
@@ -273,7 +270,7 @@ class NosePlugin(Plugin):
             self.html_h1_parent.remove(self.html_spinner_element)
         self.update_html()
         self._ajax_server.trigger_end()
-        
+
     def setLogger(self):
         stream = StringIO()
         format = logging.Formatter('%(name)s: %(levelname)s: %(message)s')
@@ -285,7 +282,7 @@ class NosePlugin(Plugin):
             if isinstance(handler, MyMemoryHandler):
                 self.log_handler.filter = handler.filter
         root_logger.addHandler(self.log_handler)
-    
+
     def addError(self, test, err):
         self.res[-1] = "failed"
     def addDeprecated(self, test):
@@ -302,7 +299,7 @@ class NosePlugin(Plugin):
         self.trace[-1] = _exc_info_to_string(err, test)
     def handleFailure(self, test, err):
         self.trace[-1] = _exc_info_to_string(err, test)
-        
+
     def startContext(self, context):
         if isclass(context):
             self.startSuite(context)
@@ -313,7 +310,7 @@ class NosePlugin(Plugin):
             self.stopSuite(context)
         else:
             self.stopModule(context)
-    
+
     def append_module(self):
         if not self.module_appended:
             if self.total_modules > 0:
@@ -321,18 +318,18 @@ class NosePlugin(Plugin):
             self.html_body_main.append(self.html_module)
             self.module_appended = True
             self.total_modules += 1
-            
+
     def append_suite(self):
         if not self.suite_appended:
             self.add_html_separator_hr(self.html_module)
             self.html_module.append(self.html_suite)
             self.suite_appended = True
             self.total_suites += 1
-            
+
     def set_log_link(self):
         self.html_log_link.attrib["href"] = self.log_name[-1]
         self.update_html()
-         
+
     def startX(self, name):
         self.name.append(name)
         for stream in self.log_stream:
@@ -359,7 +356,7 @@ class NosePlugin(Plugin):
         self.log_stream[-1].add_callback(self.set_log_link)
         self.stdouts.append(sys.stdout)
         sys.stdout = MultiStream([self.stdouts[0], self.log_stream[-1]])
-        
+
     def stopX(self, name):
         res = self.res.pop()
         if res == "running":
@@ -381,7 +378,7 @@ class NosePlugin(Plugin):
         sys.stdout = self.stdouts.pop()
         self.log_name.pop()
         return res
-            
+
     def startModule(self, module):
         self.suite_code = "file:" + pathname2url(module.__file__)
         if self.suite_code.endswith(".pyc"):
@@ -446,4 +443,3 @@ class NosePlugin(Plugin):
             self.suite_failed_tests += 1
         self.html_test_span.attrib["class"] = "test_name test_" + res
         self.update_html()
-

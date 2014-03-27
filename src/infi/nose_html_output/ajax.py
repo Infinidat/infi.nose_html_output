@@ -10,7 +10,6 @@ except ImportError:
     from urllib import pathname2url
     from Queue import Queue
 import os
-import shutil
 
 # we send this via JSONP to the local file js to run
 REFRESH_JS = """do_refresh('{}');
@@ -20,21 +19,20 @@ do_ajax_reload();"""
 
 class AjaxHandler(BaseHTTPRequestHandler):
     queue = None
-    
+
     def process_request(self, request, client_address):
         import socket
         try:
             return super(AjaxHandler, self).process_request(request, client_address)
         except socket.error:
             pass
-        
+
     def do_GET(self):
-        import json
         queue_param = self.queue.get()
         while not self.queue.empty():
             queue_param = self.queue.get()
         html_str, end = queue_param
-        result = REFRESH_JS.format(html_str.replace("'", r"\'").replace('\n', '\\n'));
+        result = REFRESH_JS.format(html_str.replace("'", r"\'").replace('\n', '\\n'))
         if not end:
             result += RELOAD_JS
         self.send_response(200)
@@ -47,10 +45,10 @@ class AjaxHandler(BaseHTTPRequestHandler):
             # python 2.7
             self.wfile.write(str(result))
         self.wfile.close()
-            
+
     def log_message(self, format, *args):
         return
-            
+
 class AjaxServer(object):
     def __init__(self, use_ajax, do_open_browser, local_file, port):
         self._use_ajax = use_ajax
@@ -58,7 +56,7 @@ class AjaxServer(object):
         self._port = port
         self._local_file = os.path.abspath(local_file)
         self._queue = Queue()
-        self._last_html_str = ""#open(local_file, "rb").read()
+        self._last_html_str = ""
         self._bind_address = 'localhost'
         self._url_to_localfile = 'file:' + pathname2url(self._local_file)
         self._url_to_webfile = 'http://%s:%s/%s' % (self._bind_address, self._port, os.path.basename(self._local_file))
